@@ -6,7 +6,7 @@ metadata:
   namespace: metallb-system
 spec:
   addresses:
-    - YOUR_SERVER_PRIVATE_IP/32  # auto-replaced by 03-bootstrap-flux.sh
+    - 172.31.20.177/32
 ---
 apiVersion: metallb.io/v1beta1
 kind: L2Advertisement
