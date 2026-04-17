@@ -26,7 +26,7 @@ spec:
 
   # ── Image (pinned for GitOps reproducibility) ─────────────
   image: mattermost/mattermost-team-edition
-  version: "9.11.0"
+  version: "10.11.14"
 
   # ── Ingress ────────────────────────────────────────────────
   # ${DOMAIN} is substituted by Flux postBuild from cluster-values ConfigMap
