@@ -130,8 +130,7 @@ spec:
           "agents": {
             "defaults": {
               "model": {
-                "primary": "litellm/claude-sonnet-4-6",
-                "fallback": "litellm/gemini-2.5-pro"
+                "primary": "litellm/claude-sonnet-4-6"
               },
               "timeoutSeconds": 600,
               "maxConcurrent": 1
