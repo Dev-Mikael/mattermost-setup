@@ -56,20 +56,16 @@ spec:
       targetPath: litellm.masterkey
 
   values:
-    tailscale:
-      ssh:
-        enabled: false
-    # ── Secrets ───────────────────────────────────────────────────────────────
-    # Delegates secret management to the Sealed Secrets controller.
-    # The chart mounts all kubeclaw-secret keys as env vars in Gateway + LiteLLM pods:
-    #   OPENCLAW_GATEWAY_TOKEN  — Gateway UI auth token
-    #   ANTHROPIC_API_KEY       — Claude API access (read by LiteLLM via os.environ/)
-    #   GEMINI_API_KEY          — Gemini API access (read by LiteLLM via os.environ/)
-    #   LITELLM_MASTER_KEY      — Internal Gateway↔LiteLLM auth (also injected via valuesFrom)
-    #   MATTERMOST_BOT_TOKEN    — Bot account token (read by OpenClaw as MATTERMOST_BOT_TOKEN env var)
-    secret:
-      create: false
-      existingSecretName: kubeclaw-secret
+  tailscale:
+    ssh:
+      enabled: false
+  hostAliases:
+    - ip: "10.244.0.22"
+      hostnames:
+      - "mattermost.mattermost.svc.cluster.local"
+  secret:
+    create: false
+    existingSecretName: kubeclaw-secret
 
     # ── LiteLLM proxy ─────────────────────────────────────────────────────────
     # Deployed as an in-cluster proxy. The chart auto-injects:
