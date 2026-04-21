@@ -30,6 +30,11 @@ require_tool git
 require_tool curl
 require_tool python3
 
+# Declare PID variables up front so trap references are never unbound,
+# even if a phase exits before the corresponding port-forward is started.
+MM_PF_PID=""
+SS_PF_PID=""
+
 # ─────────────────────────────────────────────────────────────────────────────
 # PHASE 1 — Validate env vars
 # ─────────────────────────────────────────────────────────────────────────────
@@ -151,20 +156,37 @@ MM_POD=$(kubectl get pod -n mattermost -l app=mattermost \
 [[ -z "$MM_POD" ]] && { log_error "Could not find Mattermost pod"; exit 1; }
 log_info "Using pod: $MM_POD"
 
+# Mattermost 6+ uses mmctl with --local (talks to server via Unix socket inside pod).
+# Mattermost <6 uses the legacy `mattermost user create` CLI.
+# We try mmctl first, fall back to the legacy command, then log and continue
+# either way — the user may already exist, or Phase 6 will create it via API.
+
 CREATE_OUT=$(kubectl exec -n mattermost "$MM_POD" -- \
-  mattermost user create \
-    --email    "$MM_ADMIN_EMAIL" \
-    --username "$MM_ADMIN_USERNAME" \
-    --password "$MM_ADMIN_PASSWORD" \
-    --system_admin 2>&1 || true)
+  mmctl user create \
+    --email      "$MM_ADMIN_EMAIL" \
+    --username   "$MM_ADMIN_USERNAME" \
+    --password   "$MM_ADMIN_PASSWORD" \
+    --system-admin \
+    --local 2>&1 || true)
+
+# If mmctl isn't available or returned an unknown-command error, try the legacy CLI
+if echo "$CREATE_OUT" | grep -qi "unknown\|not found\|no such\|executable"; then
+  log_info "mmctl not available — trying legacy mattermost CLI..."
+  CREATE_OUT=$(kubectl exec -n mattermost "$MM_POD" -- \
+    mattermost user create \
+      --email      "$MM_ADMIN_EMAIL" \
+      --username   "$MM_ADMIN_USERNAME" \
+      --password   "$MM_ADMIN_PASSWORD" \
+      --system_admin 2>&1 || true)
+fi
 
 if echo "$CREATE_OUT" | grep -qi "created\|success"; then
-  log_ok "Admin user '$MM_ADMIN_USERNAME' created"
+  log_ok "Admin user '$MM_ADMIN_USERNAME' created via CLI"
 elif echo "$CREATE_OUT" | grep -qi "already\|duplicate\|exists"; then
   log_info "Admin user '$MM_ADMIN_USERNAME' already exists — continuing"
 else
-  log_info "Admin create output: $CREATE_OUT"
-  log_info "Continuing — user may already exist"
+  log_info "CLI admin create output: $CREATE_OUT"
+  log_info "Will attempt API-based creation in Phase 6 if login fails"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -176,7 +198,7 @@ log_step "Phase 6/11 — Creating openclaw-bot account and access token"
 # needing DNS propagation or a valid TLS cert (may not be issued yet).
 kubectl port-forward -n mattermost svc/mattermost 8065:8065 &
 MM_PF_PID=$!
-trap 'kill $MM_PF_PID 2>/dev/null || true; kill $SS_PF_PID 2>/dev/null || true' EXIT
+trap 'kill "${MM_PF_PID:-}" 2>/dev/null || true; kill "${SS_PF_PID:-}" 2>/dev/null || true' EXIT
 sleep 6
 
 MM_API="http://localhost:8065"
@@ -188,6 +210,44 @@ LOGIN_RESP=$(curl -s -i -X POST "$MM_API/api/v4/users/login" \
   -d "{\"login_id\":\"${MM_ADMIN_USERNAME}\",\"password\":\"${MM_ADMIN_PASSWORD}\"}" 2>/dev/null)
 
 MM_TOKEN=$(echo "$LOGIN_RESP" | grep -i "^token:" | awk '{print $2}' | tr -d '\r\n')
+
+# If login failed, the server may be a fresh install with no users yet.
+# In that case, Mattermost allows creating the very first user unauthenticated.
+# We create the admin account via API, then login again to get a session token.
+if [[ -z "$MM_TOKEN" ]]; then
+  log_info "Login failed — trying unauthenticated first-user creation via API..."
+
+  FIRST_USER_RESP=$(curl -s -X POST "$MM_API/api/v4/users" \
+    -H "Content-Type: application/json" \
+    -d "{\"email\":\"${MM_ADMIN_EMAIL}\",\"username\":\"${MM_ADMIN_USERNAME}\",\"password\":\"${MM_ADMIN_PASSWORD}\"}" \
+    2>/dev/null)
+
+  FIRST_USER_ID=$(echo "$FIRST_USER_RESP" | python3 -c \
+    "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
+
+  if [[ -n "$FIRST_USER_ID" ]]; then
+    log_ok "Initial admin user created via API (id: $FIRST_USER_ID)"
+  else
+    log_info "First-user API response: $(echo "$FIRST_USER_RESP" | head -c 200)"
+  fi
+
+  # Retry login with the newly created account
+  LOGIN_RESP=$(curl -s -i -X POST "$MM_API/api/v4/users/login" \
+    -H "Content-Type: application/json" \
+    -d "{\"login_id\":\"${MM_ADMIN_USERNAME}\",\"password\":\"${MM_ADMIN_PASSWORD}\"}" 2>/dev/null)
+
+  MM_TOKEN=$(echo "$LOGIN_RESP" | grep -i "^token:" | awk '{print $2}' | tr -d '\r\n')
+
+  # Grant system_admin role if we just created this user
+  if [[ -n "$MM_TOKEN" && -n "${FIRST_USER_ID:-}" ]]; then
+    curl -s -X PUT "$MM_API/api/v4/users/${FIRST_USER_ID}/roles" \
+      -H "Authorization: Bearer $MM_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{"roles":"system_user system_admin"}' 2>/dev/null | python3 -c \
+      "import sys,json; r=json.load(sys.stdin); print('Admin role granted') if r.get('status')=='OK' else None" 2>/dev/null || true
+  fi
+fi
+
 [[ -z "$MM_TOKEN" ]] && {
   log_error "Failed to authenticate with Mattermost API."
   log_error "Check MM_ADMIN_USERNAME / MM_ADMIN_PASSWORD in .env."
