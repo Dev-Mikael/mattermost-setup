@@ -256,7 +256,7 @@ fi
 }
 log_ok "Authenticated with Mattermost API"
 
-# ── Get team ID (needed for channel lookups) ──────────────────────────────────
+# ── Get or create team ────────────────────────────────────────────────────────
 log_info "Fetching team list..."
 TEAMS_RESP=$(curl -s "$MM_API/api/v4/teams" -H "Authorization: Bearer $MM_TOKEN" 2>/dev/null)
 TEAM_ID=$(echo "$TEAMS_RESP" | python3 -c "
@@ -267,7 +267,33 @@ try:
 except: pass
 " 2>/dev/null || true)
 
-[[ -z "$TEAM_ID" ]] && log_warn "Could not determine team ID — channel join will be skipped"
+if [[ -z "$TEAM_ID" ]]; then
+  log_info "No teams found — creating default team via API..."
+  CREATE_TEAM_RESP=$(curl -s -X POST "$MM_API/api/v4/teams" \
+    -H "Authorization: Bearer $MM_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"name":"main","display_name":"Main","type":"O"}' 2>/dev/null)
+
+  TEAM_ID=$(echo "$CREATE_TEAM_RESP" | python3 -c \
+    "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))" 2>/dev/null || true)
+
+  if [[ -n "$TEAM_ID" ]]; then
+    log_ok "Default team 'main' created (id: $TEAM_ID)"
+
+    # Add admin to the new team so subsequent channel lookups succeed
+    curl -s -X POST "$MM_API/api/v4/teams/${TEAM_ID}/members" \
+      -H "Authorization: Bearer $MM_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "{\"team_id\":\"${TEAM_ID}\",\"user_id\":\"me\"}" 2>/dev/null | python3 -c \
+      "import sys,json; r=json.load(sys.stdin); print('Admin joined team') if r.get('team_id') else None" 2>/dev/null || true
+  else
+    log_warn "Could not create default team — channel join will be skipped"
+    log_warn "API response: $(echo "$CREATE_TEAM_RESP" | head -c 200)"
+  fi
+fi
+
+[[ -z "$TEAM_ID" ]] && log_warn "Team ID still unavailable — channel join will be skipped"
+[[ -n "$TEAM_ID" ]] && log_ok "Team ID resolved: $TEAM_ID"
 
 # ── Create bot account ────────────────────────────────────────────────────────
 log_info "Creating openclaw-bot account..."
