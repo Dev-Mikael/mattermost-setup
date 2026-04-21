@@ -347,6 +347,22 @@ log_ok "Bot access token generated"
 log_step "Phase 7/11 — Adding bot to channels"
 
 if [[ -n "$TEAM_ID" ]]; then
+  # Add bot to team first — channel membership requires team membership
+  log_info "Adding bot to team..."
+  BOT_TEAM_RESP=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X POST "$MM_API/api/v4/teams/${TEAM_ID}/members" \
+    -H "Authorization: Bearer $MM_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"team_id\":\"${TEAM_ID}\",\"user_id\":\"${BOT_USER_ID}\"}" 2>/dev/null)
+
+  if [[ "$BOT_TEAM_RESP" == "201" || "$BOT_TEAM_RESP" == "200" ]]; then
+    log_ok "Bot added to team"
+  elif [[ "$BOT_TEAM_RESP" == "400" ]]; then
+    log_info "Bot already a team member"
+  else
+    log_warn "Could not add bot to team (HTTP $BOT_TEAM_RESP) — channel join may fail"
+  fi
+
   # Split MM_BOT_CHANNELS on commas and trim whitespace
   IFS=',' read -ra CHANNEL_NAMES <<< "$MM_BOT_CHANNELS"
 
