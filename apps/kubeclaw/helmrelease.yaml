@@ -142,8 +142,8 @@ spec:
               "enabled": true,
               "baseUrl": "http://mattermost.mattermost.svc.cluster.local:8065",
               "chatmode": "oncall",
-              "dmPolicy": "@@MM_BOT_DM_POLICY@@",
-              "allowFrom": @@MM_BOT_ALLOW_FROM@@,
+              "dmPolicy": "pairing",
+              "allowFrom": [],
               "groupPolicy": "open",
               "commands": {
                 "native": true,
