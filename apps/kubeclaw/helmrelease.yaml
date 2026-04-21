@@ -124,36 +124,39 @@ spec:
     # MATTERMOST_BOT_TOKEN is NOT set here — OpenClaw reads it from the
     # MATTERMOST_BOT_TOKEN env var injected by kubeclaw-secret automatically.
     config:
-      mode: merge
-      desired: |
-        {
-          "agents": {
-            "defaults": {
-              "model": {
-                "primary": "litellm/claude-sonnet-4-6"
-              },
-              "timeoutSeconds": 600,
-              "maxConcurrent": 1
-            },
-            "list": [
-              { "id": "main", "default": true }
-            ]
+  mode: merge
+  desired: |
+    {
+      "gateway": {
+        "mode": "local"
+      },
+      "agents": {
+        "defaults": {
+          "model": {
+            "primary": "litellm/claude-sonnet-4-6"
           },
-          "channels": {
-            "mattermost": {
-              "enabled": true,
-              "baseUrl": "http://mattermost.mattermost.svc.cluster.local:8065",
-              "chatmode": "oncall",
-              "dmPolicy": "pairing",
-              "groupPolicy": "open",
-              "commands": {
-                "native": true,
-                "nativeSkills": true,
-                "callbackUrl": "http://kubeclaw-gateway.kubeclaw.svc.cluster.local:18789/api/channels/mattermost/command"
-              }
-            }
+          "timeoutSeconds": 600,
+          "maxConcurrent": 1
+        },
+        "list": [
+          { "id": "main", "default": true }
+        ]
+      },
+      "channels": {
+        "mattermost": {
+          "enabled": true,
+          "baseUrl": "http://mattermost.mattermost.svc.cluster.local:8065",
+          "chatmode": "oncall",
+          "dmPolicy": "pairing",
+          "groupPolicy": "open",
+          "commands": {
+            "native": true,
+            "nativeSkills": true,
+            "callbackUrl": "http://kubeclaw-gateway.kubeclaw.svc.cluster.local:18789/api/channels/mattermost/command"
           }
         }
+      }
+    }
 
     egressFilter:
       enabled: true
