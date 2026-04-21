@@ -130,8 +130,7 @@ spec:
           "agents": {
             "defaults": {
               "model": {
-                "primary": "litellm/claude-sonnet-4-6",
-                "fallback": null
+                "primary": "litellm/claude-sonnet-4-6"
               },
               "timeoutSeconds": 600,
               "maxConcurrent": 1
@@ -146,28 +145,22 @@ spec:
               "baseUrl": "http://mattermost.mattermost.svc.cluster.local:8065",
               "chatmode": "oncall",
               "dmPolicy": "pairing",
-              "allowFrom": [],
               "groupPolicy": "open",
               "commands": {
                 "native": true,
                 "nativeSkills": true,
-                "callbackUrl": "http://kubeclaw.kubeclaw.svc.cluster.local:18789/api/channels/mattermost/command"
+                "callbackUrl": "http://kubeclaw-gateway.kubeclaw.svc.cluster.local:18789/api/channels/mattermost/command"
               }
             }
           }
         }
 
-    # ── Egress filter ─────────────────────────────────────────────────────────
-    # Default-deny outbound DNS via Blocky.
-    # Mattermost and LiteLLM are reached via ClusterDNS — no external entries needed.
     egressFilter:
       enabled: true
       allowlists:
         - |
           api.anthropic.com
           generativelanguage.googleapis.com
-          mattermost.mattermost.svc.cluster.local
-          *.svc.cluster.local
 
     # ── Network Policy ────────────────────────────────────────────────────────
     # Allows ingress from NGINX Ingress (OpenClaw subdomain).
