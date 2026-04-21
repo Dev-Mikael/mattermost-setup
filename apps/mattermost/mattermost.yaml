@@ -10,6 +10,13 @@
 #   5. Used fileStore.external pointing to standalone MinIO deployment
 #   6. MinIO URL has NO http:// prefix — operator adds the scheme internally
 #   7. Uses kubernetes.io/ingress.class annotation (deprecated but works with this operator)
+#
+# KUBECLAW ADDITIONS:
+#   8. MM_SERVICESETTINGS_ENABLEUSERACCESSTOKENS=true — required for script 06 to
+#      create a personal access token for the openclaw-bot via the REST API.
+#   9. Added kubeclaw.kubeclaw.svc.cluster.local to ALLOWEDUNTRUSTEDINTERNALCONNECTIONS
+#      so Mattermost can POST slash command callbacks to the OpenClaw Gateway
+#      via in-cluster ClusterDNS without TLS verification errors.
 apiVersion: installation.mattermost.com/v1beta1
 kind: Mattermost
 metadata:
@@ -76,81 +83,60 @@ spec:
       value: "https://${DOMAIN}"
 
     # ── Push notifications (mobile: iOS / Android) ──────────────────────────
-    # Uses Mattermost's Hosted Push Notification Service (HPNS) — free for all
-    # editions. Sends push notifications to official Mattermost mobile apps.
-    # Requires: valid HTTPS (cert-manager must have issued a cert), and the
-    # mobile app logged into the correct https://${DOMAIN} site URL.
     - name: MM_EMAILSETTINGS_SENDPUSHNOTIFICATIONS
       value: "true"
-    # IMPORTANT — HPNS vs TPNS for Team Edition (free):
-    # push.mattermost.com  = HPNS — requires paid Professional/Enterprise license.
-    #   Using it on Team Edition causes "Notifications cannot be received from this
-    #   server" on mobile. This is the #1 reported notification issue on the forums.
-    # push-test.mattermost.com = TPNS — free, works with Team Edition, but Mattermost
-    #   docs say it is for testing only (no production SLA).
-    # For production with Team Edition, the real fix is to self-host the
-    #   Mattermost Push Proxy (github.com/mattermost/mattermost-push-proxy).
-    #
-    # → Using TPNS here so notifications work out of the box for Team Edition.
-    #   When you are ready to upgrade, swap this to https://push.mattermost.com
-    #   after purchasing a Professional licence.
+    # TPNS — free, works with Team Edition. Swap to push.mattermost.com only
+    # after purchasing a Professional licence (HPNS requires paid plan).
     - name: MM_EMAILSETTINGS_PUSHNOTIFICATIONSERVER
       value: "https://push-test.mattermost.com"
-    # "full" sends the actual message text in the push notification.
-    # Use "generic" if privacy is a concern (shows "New message" only).
     - name: MM_EMAILSETTINGS_PUSHNOTIFICATIONCONTENTS
       value: "full"
     - name: MM_EMAILSETTINGS_PUSHNOTIFICATIONBUFFER
       value: "1000"
-    # Send push when online, away, OR offline — catches all cases.
-    # Default ("offline only") means you only get notified when completely offline,
-    # which is why the boss sees nothing while the tab is open but not focused.
     - name: MM_EMAILSETTINGS_PUSHNOTIFICATIONTRIGGERCONDITION
       value: "always"
 
     # ── Desktop / browser notifications ──────────────────────────────────────
-    # Browser desktop popups (the OS-level notification toast) are Web Push
-    # notifications triggered by the JavaScript client via the browser's
-    # Notification API. The SERVER only needs to:
-    #   1. Serve the app over HTTPS (required by browser security policy)
-    #   2. Have SITE_URL set correctly (already set above)
-    #   3. Have WebSocket working (handled by nginx proxy-http-version: 1.1)
-    #
-    # The user MUST also:
-    #   - Allow notifications in their browser (click Allow when prompted)
-    #   - In Mattermost: Account Settings → Notifications → Desktop → "All activity"
-    #
-    # These are the valid server-side settings that influence notification behaviour:
-    # (Note: MM_NOTIFICATIONSETTINGS_DESKTOPNOTIFICATION is NOT a valid env var
-    #  and is silently ignored — removed from this config.)
     - name: MM_EMAILSETTINGS_ENABLEEMAILBATCHING
-      value: "false"   # Keep false; batching delays notifications
+      value: "false"
     - name: MM_SERVICESETTINGS_ENABLEUSERTYPINGMESSAGES
-      value: "true"    # Typing indicators require WebSocket; confirms WS is working
+      value: "true"
     - name: MM_SERVICESETTINGS_ENABLECHANNELVIEWEDMESSAGES
-      value: "true"    # Marks messages as read in real-time (needs WebSocket)
+      value: "true"
     - name: MM_SERVICESETTINGS_ALLOWCORSFROM
-      value: ""        # Leave empty unless embedding in another origin
-    # WebSocket keepalive — prevents proxies from closing idle connections.
-    # Nginx read-timeout is 600s; set ping interval well below that.
+      value: ""
     - name: MM_SERVICESETTINGS_WEBSOCKETURL
-      value: ""        # Leave empty — Mattermost auto-derives from SITEURL
-    - name: MM_SERVICESETTINGS_ALLOWEDUNTRUSTEDINTERNALCONNECTIONS
-      value: "minio.mattermost.svc.cluster.local"  # Allow MinIO internal calls
+      value: ""
 
-    # ── Existing settings ─────────────────────────────────────────────────────
+    # ── Internal connections ──────────────────────────────────────────────────
+    # Space-separated list of internal hostnames Mattermost may call outbound:
+    #   minio:     file storage (S3-compatible uploads/downloads)
+    #   kubeclaw:  slash command callback POSTs from Mattermost → OpenClaw Gateway
+    - name: MM_SERVICESETTINGS_ALLOWEDUNTRUSTEDINTERNALCONNECTIONS
+      value: "minio.mattermost.svc.cluster.local kubeclaw.kubeclaw.svc.cluster.local"
+
+    # ── Bot and API token support ─────────────────────────────────────────────
+    # EnableBotAccountCreation: allows admin to create bot accounts via UI/API.
+    # EnableUserAccessTokens: required for script 06 to generate a personal
+    #   access token for openclaw-bot via POST /api/v4/users/{id}/tokens.
+    #   Also required at runtime for the bot token to be accepted by Mattermost.
+    - name: MM_SERVICESETTINGS_ENABLEBOTACCOUNTCREATION
+      value: "true"
+    - name: MM_SERVICESETTINGS_ENABLEUSERACCESSTOKENS
+      value: "true"
+
+    # ── Logging and auth ──────────────────────────────────────────────────────
     - name: MM_LOGSETTINGS_CONSOLELEVEL
       value: "INFO"
     - name: MM_EMAILSETTINGS_ENABLESIGNINWITHEMAIL
       value: "true"
     - name: MM_EMAILSETTINGS_ENABLESIGNINWITHUSERNAME
       value: "true"
-    - name: MM_SERVICESETTINGS_ENABLEBOTACCOUNTCREATION
-      value: "true"
     - name: MM_FILESETTINGS_AMAZONS3SSL
       value: "false"   # MinIO is internal HTTP — no SSL needed inside cluster
 
-#config also has no SMTP settings, which means email notifications (password resets, account verification, notifications will not be functional
+#config also has no SMTP settings, which means email notifications (password resets,
+# account verification) will not be functional until SMTP is configured.
 # - name: MM_EMAILSETTINGS_ENABLESMTPAUTH
 #   value: "true"
 # - name: MM_EMAILSETTINGS_SMTPSERVER
@@ -171,4 +157,4 @@ spec:
 #   value: "noreply@${DOMAIN}"
 # - name: MM_EMAILSETTINGS_REPLYTOADDRESS
 #   value: "noreply@${DOMAIN}"
-#Store the SMTP credentials as a SealedSecret using the same sealing process in scripts/04-wait-and-seal.sh
+# Store SMTP credentials as a SealedSecret following the same pattern in 04-wait-and-seal.sh
