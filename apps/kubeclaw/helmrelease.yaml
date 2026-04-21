@@ -166,6 +166,8 @@ spec:
         - |
           api.anthropic.com
           generativelanguage.googleapis.com
+          mattermost.mattermost.svc.cluster.local
+          *.svc.cluster.local
 
     # ── Network Policy ────────────────────────────────────────────────────────
     # Allows ingress from NGINX Ingress (OpenClaw subdomain).
