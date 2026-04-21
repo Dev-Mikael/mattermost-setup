@@ -130,7 +130,8 @@ spec:
           "agents": {
             "defaults": {
               "model": {
-                "primary": "litellm/claude-sonnet-4-6"
+                "primary": "litellm/claude-sonnet-4-6",
+                "fallback": null
               },
               "timeoutSeconds": 600,
               "maxConcurrent": 1
