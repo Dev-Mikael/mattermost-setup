@@ -118,7 +118,7 @@ spec:
     #   replaced by scripts/06-setup-kubeclaw.sh Phase 2 before git commit.
     config:
       mode: merge
-      # FIX 5: @@MM_BOT_DM_POLICY@@ and @@MM_BOT_ALLOW_FROM@@ placeholders
+      # FIX 5: pairing and [] placeholders
       # are restored. The original had "dmPolicy" hardcoded to "pairing" and
       # was missing the "allowFrom" field entirely — the sed in Phase 2 of
       # 06-setup-kubeclaw.sh was a complete no-op. MM_BOT_DM_POLICY=open in
@@ -145,8 +145,8 @@ spec:
               "enabled": true,
               "baseUrl": "http://mattermost.mattermost.svc.cluster.local:8065",
               "chatmode": "oncall",
-              "dmPolicy": "@@MM_BOT_DM_POLICY@@",
-              "allowFrom": @@MM_BOT_ALLOW_FROM@@,
+              "dmPolicy": "pairing",
+              "allowFrom": [],
               "groupPolicy": "open",
               "commands": {
                 "native": true,
