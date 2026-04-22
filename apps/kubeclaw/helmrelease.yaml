@@ -175,6 +175,7 @@ spec:
           generativelanguage.googleapis.com
           mattermost.mattermost.svc.cluster.local
           kubeclaw.kubeclaw.svc.cluster.local
+          openclaw.modumichael.me
 
     # ── Network Policy ────────────────────────────────────────────────────────
     # Allows ingress from NGINX Ingress (OpenClaw subdomain).
