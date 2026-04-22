@@ -5,4 +5,5 @@ resources:
   - helmrelease.yaml
   - ingress.yaml
   - networkpolicy-mattermost.yaml
+  - hpa-chromium.yaml
   - secrets/
