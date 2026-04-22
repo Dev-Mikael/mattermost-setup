@@ -63,8 +63,8 @@ spec:
     tailscale:
       ssh:
         enabled: false
-    otel:
-      node:
+    observability:
+      nodeCollector:
         enabled: false
     # FIX 2: hostAliases block REMOVED.
     # The original had `ip: "10.244.0.22"` (a pod IP, not a Service ClusterIP).
