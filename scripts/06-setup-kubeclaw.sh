@@ -125,9 +125,15 @@ git diff --cached --quiet && {
   log_ok "kubeclaw structure committed and pushed"
 }
 
-# Kick off Flux source reconcile so it picks up the new app structure.
-# HelmRelease stays Pending (kubeclaw-secret not yet created) — expected.
-flux reconcile source git flux-system 2>/dev/null || true
+# Kick off a source-only reconcile so Flux picks up the new app structure.
+# The HelmRelease will enter a Pending / waiting-for-secret state — this is
+# expected and correct. We do NOT reconcile the `apps` kustomization here
+# because the kubeclaw-secret does not exist yet; reconciling apps would cause
+# the HelmRelease to fail immediately and start exponential back-off retries,
+# which then compete with Phase 8's proper reconcile and can push the
+# kustomization past its 15-minute timeout ("context deadline exceeded").
+# Phase 8 triggers `flux reconcile kustomization apps` after the secret lands.
+flux reconcile source git flux-system --timeout=2m 2>/dev/null || true
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PHASE 4 — Wait for Mattermost pod
@@ -463,8 +469,13 @@ git diff --cached --quiet && {
 }
 
 log_info "Triggering Flux reconciliation..."
-flux reconcile source git flux-system 2>/dev/null || true
-flux reconcile kustomization apps --with-source 2>/dev/null || true
+# Reconcile the source first so Flux pulls the commit with the sealed secret.
+flux reconcile source git flux-system --timeout=2m 2>/dev/null || true
+# Give the source controller a moment to update the artifact before kustomize runs.
+sleep 5
+# Now reconcile apps — the sealed secret is present so the HelmRelease can proceed.
+# --with-source ensures the kustomize controller re-reads the latest git artifact.
+flux reconcile kustomization apps --with-source --timeout=2m 2>/dev/null || true
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PHASE 9 — Wait for KubeClaw Gateway pod
@@ -479,11 +490,18 @@ for i in $(seq 1 30); do
 done
 
 log_info "Waiting for HelmRelease to become Ready..."
-for i in $(seq 1 36); do
+# 60 × 10s = 10 min — enough for OCI image pull + Helm install on a slow link.
+# At the 30-attempt midpoint, nudge Flux if it is stuck in back-off.
+for i in $(seq 1 60); do
   HR=$(kubectl get helmrelease kubeclaw -n kubeclaw \
     -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
   [[ "$HR" == "True" ]] && { log_ok "HelmRelease kubeclaw Ready"; break; }
-  log_info "HelmRelease not ready... attempt $i/36"
+    # At the 30-attempt midpoint, nudge Flux in case it is stuck in back-off
+  if [[ "$i" -eq 30 ]]; then
+    log_info "Midpoint nudge — forcing HelmRelease reconcile..."
+    flux reconcile helmrelease kubeclaw -n kubeclaw --timeout=2m 2>/dev/null || true
+  fi
+  log_info "HelmRelease not ready... attempt $i/60"
   sleep 10
 done
 

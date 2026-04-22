@@ -55,23 +55,31 @@ spec:
       valuesKey: LITELLM_MASTER_KEY
       targetPath: litellm.masterkey
 
+  # FIX 1: All values keys are now correctly indented 4 spaces under `values:`
+  # (previously they were at 2 spaces — same level as `values:` itself — so
+  # the entire values block was silently empty and all keys were unknown
+  # HelmRelease.spec fields, causing Flux to fail YAML validation on apply).
   values:
-  tailscale:
-    ssh:
-      enabled: false
-  hostAliases:
-    - ip: "10.244.0.22"
-      hostnames:
-      - "mattermost.mattermost.svc.cluster.local"
-  secret:
-    create: false
-    existingSecretName: kubeclaw-secret
+    tailscale:
+      ssh:
+        enabled: false
 
-    # ── LiteLLM proxy ─────────────────────────────────────────────────────────
-    # Deployed as an in-cluster proxy. The chart auto-injects:
-    #   OPENAI_API_BASE=http://kubeclaw-litellm:4000/v1
-    # into the Gateway pod so all LLM SDK calls route through it transparently.
-    # API keys use os.environ/ references — resolved from env vars at pod runtime.
+    # FIX 2: hostAliases block REMOVED.
+    # The original had `ip: "10.244.0.22"` (a pod IP, not a Service ClusterIP).
+    # Pod IPs are ephemeral — they change on every Mattermost pod restart.
+    # CoreDNS resolves `mattermost.mattermost.svc.cluster.local` to the stable
+    # Service ClusterIP automatically; the hostAlias was not only unnecessary
+    # but caused the Gateway to lose connectivity after any Mattermost restart.
+
+    secret:
+      create: false
+      existingSecretName: kubeclaw-secret
+
+    # FIX 3: litellm is now a peer of `secret` under `values:`, NOT nested
+    # inside `secret:`. Previously indented under secret: which made the chart
+    # receive litellm config as `secret.litellm.*` (unknown, ignored) instead
+    # of `litellm.*` (applied). LiteLLM proxy started unconfigured → OpenClaw
+    # pod CrashLoopBackOff because it could not reach any LLM backend.
     litellm:
       enabled: true
       proxy_config:
@@ -93,67 +101,70 @@ spec:
       db:
         deployStandalone: false
 
-    # ── OpenClaw config (bot behaviour) ───────────────────────────────────────
-    # Applied at pod start via JSON merge-patch by an initContainer.
-    # The @@PLACEHOLDER@@ tokens below are replaced by scripts/06-setup-kubeclaw.sh
-    # with values derived from .env before this file is committed to git.
+    # FIX 4: config is now a peer of `litellm` under `values:`, NOT inside
+    # `secret:`. `mode` and `desired` are correctly indented under `config`.
+    # Previously `mode:` and `desired:` were at 2-space indent (spec level),
+    # making them unknown fields on HelmRelease.spec — the entire config block
+    # was silently dropped, so OpenClaw had no Mattermost channel configuration
+    # and the Gateway pod started but could not connect → 0/1 Running.
     #
     # Bot behaviour controlled by .env vars:
-    #   MM_BOT_DM_POLICY   — "pairing" (default, per-user approval) or "open" (anyone)
-    #   MM_BOT_CHANNELS    — comma-separated channel names to auto-join (e.g. town-square,general)
+    #   MM_BOT_DM_POLICY   — "pairing" (default) or "open"
+    #   MM_BOT_CHANNELS    — comma-separated channel names to auto-join
     #
-    # chatmode: "oncall"
-    #   Bot is silent in channels unless explicitly @mentioned.
-    #   It always responds to DMs regardless of chatmode.
-    #
-    # groupPolicy: "open"
-    #   Once the bot is a member of a channel (added by script 06 via API),
-    #   it responds to @mentions from any user in that channel.
-    #   Pair with chatmode "oncall" to avoid noise.
-    #
-    # dmPolicy: controlled by MM_BOT_DM_POLICY in .env
-    #   "pairing" — first DM from an unknown user returns a pairing code.
-    #               Admin approves via: scripts/07-manage-bot.sh approve
-    #   "open"    — any Mattermost user can DM the bot without approval.
-    #               Set allowFrom: ["*"] alongside this.
-    #
-    # MATTERMOST_BOT_TOKEN is NOT set here — OpenClaw reads it from the
-    # MATTERMOST_BOT_TOKEN env var injected by kubeclaw-secret automatically.
+    # chatmode: "oncall" — bot is silent unless @mentioned in channels.
+    # groupPolicy: "open" — any member of a channel can trigger the bot.
+    # dmPolicy / allowFrom — controlled by @@PLACEHOLDER@@ tokens below,
+    #   replaced by scripts/06-setup-kubeclaw.sh Phase 2 before git commit.
     config:
-  mode: merge
-  desired: |
-    {
-      "gateway": {
-        "mode": "local"
-      },
-      "agents": {
-        "defaults": {
-          "model": {
-            "primary": "litellm/claude-sonnet-4-6"
+      mode: merge
+      # FIX 5: @@MM_BOT_DM_POLICY@@ and @@MM_BOT_ALLOW_FROM@@ placeholders
+      # are restored. The original had "dmPolicy" hardcoded to "pairing" and
+      # was missing the "allowFrom" field entirely — the sed in Phase 2 of
+      # 06-setup-kubeclaw.sh was a complete no-op. MM_BOT_DM_POLICY=open in
+      # .env had no effect and allowFrom was never injected into the config.
+      desired: |
+        {
+          "gateway": {
+            "mode": "local"
           },
-          "timeoutSeconds": 600,
-          "maxConcurrent": 1
-        },
-        "list": [
-          { "id": "main", "default": true }
-        ]
-      },
-      "channels": {
-        "mattermost": {
-          "enabled": true,
-          "baseUrl": "http://mattermost.mattermost.svc.cluster.local:8065",
-          "chatmode": "oncall",
-          "dmPolicy": "pairing",
-          "groupPolicy": "open",
-          "commands": {
-            "native": true,
-            "nativeSkills": true,
-            "callbackUrl": "http://kubeclaw-gateway.kubeclaw.svc.cluster.local:18789/api/channels/mattermost/command"
+          "agents": {
+            "defaults": {
+              "model": {
+                "primary": "litellm/claude-sonnet-4-6"
+              },
+              "timeoutSeconds": 600,
+              "maxConcurrent": 1
+            },
+            "list": [
+              { "id": "main", "default": true }
+            ]
+          },
+          "channels": {
+            "mattermost": {
+              "enabled": true,
+              "baseUrl": "http://mattermost.mattermost.svc.cluster.local:8065",
+              "chatmode": "oncall",
+              "dmPolicy": "@@MM_BOT_DM_POLICY@@",
+              "allowFrom": @@MM_BOT_ALLOW_FROM@@,
+              "groupPolicy": "open",
+              "commands": {
+                "native": true,
+                "nativeSkills": true,
+                "callbackUrl": "http://kubeclaw-gateway.kubeclaw.svc.cluster.local:18789/api/channels/mattermost/command"
+              }
+            }
           }
         }
-      }
-    }
 
+    # FIX 6: egressFilter and networkPolicy are now correct top-level values
+    # keys (peers of config/litellm/secret) at 4-space indent.
+    # Previously they sat inside the `desired: |` literal block scalar because
+    # `desired:` was at 2-space indent and these keys were at 4 spaces — the
+    # YAML spec keeps block scalar content until indentation drops to the key's
+    # own level (≤2 spaces). The `desired` string therefore contained trailing
+    # YAML after the closing JSON `}`, making the merged config unparseable by
+    # the OpenClaw initContainer → pod stuck in Init:Error / CrashLoopBackOff.
     egressFilter:
       enabled: true
       allowlists:
