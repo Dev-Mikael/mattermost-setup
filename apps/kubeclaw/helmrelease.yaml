@@ -64,6 +64,7 @@ spec:
       ssh:
         enabled: false
     observability:
+      enabled: false        # <-- ADD THIS master toggle
       nodeCollector:
         enabled: false
       clickstack:
@@ -139,7 +140,7 @@ spec:
       desired: |
         {
           "gateway": {
-            "mode": "local"
+            "mode": "live"
           },
           "agents": {
             "defaults": {
