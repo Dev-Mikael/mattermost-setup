@@ -72,6 +72,10 @@ spec:
       targetPath: litellm.masterkey
 
   values:
+    host: openclaw.modumichael.me 
+
+    ingress:
+      host: openclaw.modumichael.me  
     tailscale:
       ssh:
         enabled: false
