@@ -35,6 +35,26 @@ spec:
       retries: 3
       strategy: rollback
 
+  # FIX: Persist gateway probe timeout increases so Flux reconciles don't
+  # overwrite the manual kubectl patch. The chart does not expose these via
+  # values, so we use postRenderers to patch the StatefulSet after render.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: StatefulSet
+              name: kubeclaw-gateway
+            patch: |
+              - op: replace
+                path: /spec/template/spec/containers/0/livenessProbe/timeoutSeconds
+                value: 30
+              - op: replace
+                path: /spec/template/spec/containers/0/livenessProbe/periodSeconds
+                value: 60
+              - op: replace
+                path: /spec/template/spec/containers/0/readinessProbe/timeoutSeconds
+                value: 30
+
   valuesFrom:
     - kind: Secret
       name: kubeclaw-secret
@@ -42,15 +62,6 @@ spec:
       targetPath: litellm.masterkey
 
   values:
-    gateway:
-      livenessProbe:
-        timeoutSeconds: 30
-        periodSeconds: 60
-        failureThreshold: 3
-      readinessProbe:
-        timeoutSeconds: 30
-        periodSeconds: 15
-        failureThreshold: 3
     tailscale:
       ssh:
         enabled: false
@@ -126,6 +137,12 @@ spec:
           }
         }
 
+    # FIX: The chart ships a default customConfig that blocks * and only
+    # whitelists github.com. The allowlists: field is ignored when customConfig
+    # is present. We provide our own customConfig with:
+    #   - conditional mapping to forward *.cluster.local directly to CoreDNS,
+    #     bypassing the blocklist entirely (wildcard strings don't work in lists)
+    #   - explicit allowlist for external AI provider endpoints
     egressFilter:
       enabled: true
       customConfig: |
