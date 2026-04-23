@@ -64,6 +64,12 @@ spec:
                   group: gateway.envoyproxy.io
                   kind: EnvoyProxy
                   name: kubeclaw-proxy-config
+        - target:
+            kind: HTTPRoute
+          patch: |
+            - op: replace
+              path: /spec/hostnames/0
+              value: openclaw.modumichael.me
 
   valuesFrom:
     - kind: Secret
