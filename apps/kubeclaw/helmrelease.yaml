@@ -38,21 +38,32 @@ spec:
   # overwrite the manual kubectl patch. The chart does not expose these via
   # values, so we use postRenderers to patch the StatefulSet after render.
   postRenderers:
-    - kustomize:
-        patches:
-          - target:
-              kind: StatefulSet
-              name: kubeclaw-gateway
-            patch: |
-              - op: replace
-                path: /spec/template/spec/containers/0/livenessProbe/timeoutSeconds
-                value: 30
-              - op: replace
-                path: /spec/template/spec/containers/0/livenessProbe/periodSeconds
-                value: 60
-              - op: replace
-                path: /spec/template/spec/containers/0/readinessProbe/timeoutSeconds
-                value: 30
+  - kustomize:
+      patches:
+        - target:
+            kind: StatefulSet
+            name: kubeclaw-gateway
+          patch: |
+            - op: replace
+              path: /spec/template/spec/containers/0/livenessProbe/timeoutSeconds
+              value: 30
+            - op: replace
+              path: /spec/template/spec/containers/0/livenessProbe/periodSeconds
+              value: 60
+            - op: replace
+              path: /spec/template/spec/containers/0/readinessProbe/timeoutSeconds
+              value: 30
+        - target:
+            kind: Gateway
+            name: kubeclaw-gateway-api
+          patch: |
+            - op: add
+              path: /spec/infrastructure
+              value:
+                parametersRef:
+                  group: gateway.envoyproxy.io
+                  kind: EnvoyProxy
+                  name: kubeclaw-proxy-config
 
   valuesFrom:
     - kind: Secret
