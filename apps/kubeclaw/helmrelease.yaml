@@ -140,7 +140,7 @@ spec:
       desired: |
         {
           "gateway": {
-            "mode": "live"
+            "mode": "local"
           },
           "agents": {
             "defaults": {
