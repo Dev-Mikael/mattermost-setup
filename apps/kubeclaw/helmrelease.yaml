@@ -42,6 +42,15 @@ spec:
       targetPath: litellm.masterkey
 
   values:
+    gateway:
+      livenessProbe:
+        timeoutSeconds: 30
+        periodSeconds: 60
+        failureThreshold: 3
+      readinessProbe:
+        timeoutSeconds: 30
+        periodSeconds: 15
+        failureThreshold: 3
     tailscale:
       ssh:
         enabled: false
