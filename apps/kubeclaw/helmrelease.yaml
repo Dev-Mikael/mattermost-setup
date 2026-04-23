@@ -123,6 +123,9 @@ spec:
         upstream:
           default:
             - 10.96.0.10
+        conditional:
+          mapping:
+            cluster.local: 10.96.0.10
         ports:
           dns: 5353
           http: 4000
@@ -134,7 +137,6 @@ spec:
           whiteLists:
             blockAll:
               - |
-                *.cluster.local
                 api.anthropic.com
                 generativelanguage.googleapis.com
                 openclaw.modumichael.me
