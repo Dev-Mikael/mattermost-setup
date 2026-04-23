@@ -73,6 +73,12 @@ spec:
         enabled: false
       otelCollector:
         enabled: false
+      service:
+      type: ClusterIP
+      gatewayAPI:
+        enabled: false
+      ingress:
+        enabled: true
 
     secret:
       create: false
