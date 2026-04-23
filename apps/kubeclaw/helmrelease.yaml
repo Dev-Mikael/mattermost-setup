@@ -81,7 +81,7 @@ spec:
     litellm:
       enabled: true
       proxy_config:
-        litellm_settings:        # <-- add this block
+        litellm_settings:
           drop_params: true
         model_list:
           - model_name: "claude-sonnet-4-6"
@@ -90,8 +90,9 @@ spec:
               api_key: "os.environ/ANTHROPIC_API_KEY"
           - model_name: "gemini-2.5-pro"
             litellm_params:
-              model: "gemini/gemini-2.5-pro"
+              model: "google/gemini-2.5-pro"    # FIX: was "gemini/" which ambiguously routes to Vertex AI
               api_key: "os.environ/GEMINI_API_KEY"
+              drop_params: true                  # per-model fallback in case global setting isn't loaded
         router_settings:
           routing_strategy: "simple-shuffle"
           num_retries: 2
