@@ -132,7 +132,8 @@ spec:
         enabled: true
       db:
         deployStandalone: false
-
+      environmentSecrets:
+        - kubeclaw-secret
     config:
       mode: merge
       desired: |
