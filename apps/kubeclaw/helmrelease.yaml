@@ -111,7 +111,7 @@ spec:
           "agents": {
             "defaults": {
               "model": {
-                "primary": "litellm/claude-sonnet-4-6"
+                "primary": "claude-sonnet-4-6"
               },
               "timeoutSeconds": 600,
               "maxConcurrent": 1
