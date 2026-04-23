@@ -119,13 +119,25 @@ spec:
 
     egressFilter:
       enabled: true
-      allowlists:
-        - |
-          api.anthropic.com
-          generativelanguage.googleapis.com
-          mattermost.mattermost.svc.cluster.local
-          kubeclaw.kubeclaw.svc.cluster.local
-          openclaw.modumichael.me
+      customConfig: |
+        upstream:
+          default:
+            - 10.96.0.10
+        ports:
+          dns: 5353
+          http: 4000
+        blocking:
+          blackLists:
+            blockAll:
+              - |
+                *
+          whiteLists:
+            blockAll:
+              - |
+                *.cluster.local
+                api.anthropic.com
+                generativelanguage.googleapis.com
+                openclaw.modumichael.me
 
     networkPolicy:
       enabled: true
