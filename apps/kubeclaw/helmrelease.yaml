@@ -72,10 +72,6 @@ spec:
       targetPath: litellm.masterkey
 
   values:
-    host: openclaw.modumichael.me 
-
-    ingress:
-      host: openclaw.modumichael.me  
     tailscale:
       ssh:
         enabled: false
@@ -99,6 +95,14 @@ spec:
       create: false
       existingSecretName: kubeclaw-secret
 
+    # FIX: Set real domain for Ingress rule
+    ingress:
+      host: openclaw.modumichael.me
+
+    # FIX: Set real domain for Gateway listener and all HTTPRoutes
+    gatewayAPI:
+      host: openclaw.modumichael.me
+
     litellm:
       enabled: true
       proxy_config:
@@ -111,9 +115,9 @@ spec:
               api_key: "os.environ/ANTHROPIC_API_KEY"
           - model_name: "gemini-2.5-pro"
             litellm_params:
-              model: "gemini/gemini-2.5-pro"    # FIX: reverted from google/ (invalid) back to gemini/
+              model: "gemini/gemini-2.5-pro"
               api_key: "os.environ/GEMINI_API_KEY"
-              drop_params: true                  # FIX: per-model drop_params strips patternProperties/additionalProperties
+              drop_params: true
         router_settings:
           routing_strategy: "simple-shuffle"
           num_retries: 2
@@ -188,12 +192,7 @@ spec:
           }
         }
 
-    # FIX: The chart ships a default customConfig that blocks * and only
-    # whitelists github.com. The allowlists: field is ignored when customConfig
-    # is present. We provide our own customConfig with:
-    #   - conditional mapping to forward *.cluster.local directly to CoreDNS,
-    #     bypassing the blocklist entirely (wildcard strings don't work in lists)
-    #   - explicit allowlist for external AI provider endpoints
+    # FIX: custom egress filter config
     egressFilter:
       enabled: true
       customConfig: |
