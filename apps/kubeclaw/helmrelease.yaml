@@ -81,6 +81,8 @@ spec:
     litellm:
       enabled: true
       proxy_config:
+        litellm_settings:        # <-- add this block
+          drop_params: true
         model_list:
           - model_name: "claude-sonnet-4-6"
             litellm_params:
