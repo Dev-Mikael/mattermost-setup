@@ -90,9 +90,9 @@ spec:
               api_key: "os.environ/ANTHROPIC_API_KEY"
           - model_name: "gemini-2.5-pro"
             litellm_params:
-              model: "google/gemini-2.5-pro"    # FIX: was "gemini/" which ambiguously routes to Vertex AI
+              model: "gemini/gemini-2.5-pro"    # FIX: reverted from google/ (invalid) back to gemini/
               api_key: "os.environ/GEMINI_API_KEY"
-              drop_params: true                  # per-model fallback in case global setting isn't loaded
+              drop_params: true                  # FIX: per-model drop_params strips patternProperties/additionalProperties
         router_settings:
           routing_strategy: "simple-shuffle"
           num_retries: 2
