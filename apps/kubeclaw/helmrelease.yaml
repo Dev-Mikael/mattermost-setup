@@ -14,7 +14,6 @@ metadata:
   name: kubeclaw
   namespace: kubeclaw
 spec:
-  suspend: true
   interval: 10m0s
   timeout: 15m
   chart:
