@@ -1,15 +1,4 @@
 # apps/kubeclaw/helmrelease.yaml
-#
-# OCI HelmRepository — type: oci is required for ghcr.io OCI artifacts.
-# The url is the registry+org prefix only; chart name is specified in HelmRelease.
-# Flux resolves: oci://ghcr.io/imerica/kubeclaw:0.1.0
-#
-# UPGRADING: Edit version: below, commit, push. Chart pins image.tag + image.digest
-# on every release so a version bump also upgrades the Gateway image deterministically.
-#
-# NOTE: The config.desired block below contains @@PLACEHOLDER@@ tokens.
-# scripts/06-setup-kubeclaw.sh rewrites them with values from .env before
-# committing this file to git. Do not edit the placeholder lines manually.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
 metadata:
@@ -27,6 +16,7 @@ metadata:
   namespace: kubeclaw
 spec:
   interval: 10m0s
+  timeout: 15m
   chart:
     spec:
       chart: kubeclaw
@@ -45,55 +35,30 @@ spec:
       retries: 3
       strategy: rollback
 
-  # ── litellm.masterkey via valuesFrom ─────────────────────────────────────────
-  # The masterkey is a required Helm chart value for the LiteLLM subchart.
-  # Flux reads LITELLM_MASTER_KEY from the decrypted kubeclaw-secret and injects
-  # it as the litellm.masterkey Helm value — never stored in plaintext in git.
   valuesFrom:
     - kind: Secret
       name: kubeclaw-secret
       valuesKey: LITELLM_MASTER_KEY
       targetPath: litellm.masterkey
 
-  # FIX 1: All values keys are now correctly indented 4 spaces under `values:`
-  # (previously they were at 2 spaces — same level as `values:` itself — so
-  # the entire values block was silently empty and all keys were unknown
-  # HelmRelease.spec fields, causing Flux to fail YAML validation on apply).
   values:
     tailscale:
       ssh:
         enabled: false
+
     observability:
-      enabled: false        # <-- ADD THIS master toggle
+      enabled: false
       nodeCollector:
         enabled: false
       clickstack:
         enabled: false
       otelCollector:
         enabled: false
-    # service:
-    #   type: ClusterIP
-    # gatewayAPI:
-    #   enabled: false
-    # ingress:
-    #   enabled: true
-
-    # FIX 2: hostAliases block REMOVED.
-    # The original had `ip: "10.244.0.22"` (a pod IP, not a Service ClusterIP).
-    # Pod IPs are ephemeral — they change on every Mattermost pod restart.
-    # CoreDNS resolves `mattermost.mattermost.svc.cluster.local` to the stable
-    # Service ClusterIP automatically; the hostAlias was not only unnecessary
-    # but caused the Gateway to lose connectivity after any Mattermost restart.
 
     secret:
       create: false
       existingSecretName: kubeclaw-secret
 
-    # FIX 3: litellm is now a peer of `secret` under `values:`, NOT nested
-    # inside `secret:`. Previously indented under secret: which made the chart
-    # receive litellm config as `secret.litellm.*` (unknown, ignored) instead
-    # of `litellm.*` (applied). LiteLLM proxy started unconfigured → OpenClaw
-    # pod CrashLoopBackOff because it could not reach any LLM backend.
     litellm:
       enabled: true
       proxy_config:
@@ -111,32 +76,12 @@ spec:
           num_retries: 2
           timeout: 120
       redis:
-        enabled: true        # semantic response caching
+        enabled: true
       db:
         deployStandalone: false
 
-    # FIX 4: config is now a peer of `litellm` under `values:`, NOT inside
-    # `secret:`. `mode` and `desired` are correctly indented under `config`.
-    # Previously `mode:` and `desired:` were at 2-space indent (spec level),
-    # making them unknown fields on HelmRelease.spec — the entire config block
-    # was silently dropped, so OpenClaw had no Mattermost channel configuration
-    # and the Gateway pod started but could not connect → 0/1 Running.
-    #
-    # Bot behaviour controlled by .env vars:
-    #   MM_BOT_DM_POLICY   — "pairing" (default) or "open"
-    #   MM_BOT_CHANNELS    — comma-separated channel names to auto-join
-    #
-    # chatmode: "oncall" — bot is silent unless @mentioned in channels.
-    # groupPolicy: "open" — any member of a channel can trigger the bot.
-    # dmPolicy / allowFrom — controlled by @@PLACEHOLDER@@ tokens below,
-    #   replaced by scripts/06-setup-kubeclaw.sh Phase 2 before git commit.
     config:
       mode: merge
-      # FIX 5: pairing and [] placeholders
-      # are restored. The original had "dmPolicy" hardcoded to "pairing" and
-      # was missing the "allowFrom" field entirely — the sed in Phase 2 of
-      # 06-setup-kubeclaw.sh was a complete no-op. MM_BOT_DM_POLICY=open in
-      # .env had no effect and allowFrom was never injected into the config.
       desired: |
         {
           "gateway": {
@@ -172,14 +117,6 @@ spec:
           }
         }
 
-    # FIX 6: egressFilter and networkPolicy are now correct top-level values
-    # keys (peers of config/litellm/secret) at 4-space indent.
-    # Previously they sat inside the `desired: |` literal block scalar because
-    # `desired:` was at 2-space indent and these keys were at 4 spaces — the
-    # YAML spec keeps block scalar content until indentation drops to the key's
-    # own level (≤2 spaces). The `desired` string therefore contained trailing
-    # YAML after the closing JSON `}`, making the merged config unparseable by
-    # the OpenClaw initContainer → pod stuck in Init:Error / CrashLoopBackOff.
     egressFilter:
       enabled: true
       allowlists:
@@ -190,9 +127,6 @@ spec:
           kubeclaw.kubeclaw.svc.cluster.local
           openclaw.modumichael.me
 
-    # ── Network Policy ────────────────────────────────────────────────────────
-    # Allows ingress from NGINX Ingress (OpenClaw subdomain).
-    # networkpolicy-mattermost.yaml adds ingress from mattermost ns on :18789.
     networkPolicy:
       enabled: true
       ingressControllerNamespaceSelector:
