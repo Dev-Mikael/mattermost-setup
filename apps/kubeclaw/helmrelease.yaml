@@ -66,6 +66,10 @@ spec:
     observability:
       nodeCollector:
         enabled: false
+      clickstack:
+        enabled: false
+      otelCollector:
+        enabled: false
     # service:
     #   type: ClusterIP
     # gatewayAPI:
