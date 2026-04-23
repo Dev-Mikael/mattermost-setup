@@ -74,7 +74,7 @@ spec:
       otelCollector:
         enabled: false
       service:
-      type: ClusterIP
+        type: ClusterIP
       gatewayAPI:
         enabled: false
       ingress:
